@@ -13,42 +13,61 @@ class FetchData {
 
 class Twitter {
     constructor({
+        user,
         listElem,
         modalElems,
         tweetElems,
-        user
+        classDeleteTweet,
+        classLikeTweet,
+        sortElem,
+        showUserPostsElem,
+        showLikedPostElem
     }) {
-        this.user = user;
         const fetchData = new FetchData()
+        this.user = user;
         this.tweets = new Posts();
         this.elements = {
             listElem: document.querySelector(listElem),
+            sortElem: document.querySelector(sortElem),
             modal: modalElems,
             tweetElems,
-            user,
+            showUserPostsElem: document.querySelector(showUserPostsElem),
+            showLikedPostElem: document.querySelector(showLikedPostElem),
+        };
+        this.class = {
+            classDeleteTweet,
+            classLikeTweet
         }
+        this.sortDate = true;
 
-        fetchData.getPost().then(data => {
-            data.forEach(item => {
-                this.tweets.addPost(item)
-            });
-            this.showAllPost();
-            this.elements.modal.forEach(this.handlerModal, this);
-            this.elements.tweetElems.forEach(this.addTweet, this)
-        })
+        fetchData.getPost()
+            .then(data => {
+                data.forEach(this.tweets.addPost)
+                this.showAllPost();
+            })
+        this.elements.modal.forEach(this.handlerModal, this);
+        this.elements.tweetElems.forEach(this.addTweet, this);
+        this.elements.listElem.addEventListener('click', this.handlerTweet);
+        this.elements.sortElem.addEventListener('click', this.changeSort)
+        this.elements.showLikedPostElem.addEventListener('click', this.showLikedPost);
+        this.elements.showUserPostsElem.addEventListener('click', this.showUserPost);
+
+
     };
     renderPost(posts) {
-            this.elements.listElem.textContent = "";
-            posts.forEach(({
+            const sortPost = posts.sort(this.sortFields())
+            this.elements.listElem.textContent = '';
+            sortPost.forEach(({
                         id,
                         userName,
                         nickname,
                         text,
                         img,
                         likes = 0,
+                        liked,
                         getDate
                     }) => {
-                        this.elements.listElem.insertAdjacentHTML('afterbegin', `
+                        this.elements.listElem.insertAdjacentHTML('beforeend', `
             <li>
                 <article class="tweet">
                     <div class="row">
@@ -59,7 +78,7 @@ class Twitter {
                                     <span class="tweet-author__add tweet-author__nickname">${nickname}</span>
                                     <time class="tweet-author__add tweet__date">${getDate()}</time>
                                 </h3>
-                                <button class="tweet__delete-button chest-icon data-id="${id}"></button>
+                                <button class="tweet__delete-button chest-icon" data-id="${id}"></button>
                             </header>
                             <div class="tweet-post">
                                 <p class="tweet-post__text">${text}</p>
@@ -70,7 +89,7 @@ class Twitter {
                         </div>
                     </div>
                     <footer>
-                    <button class="tweet__like">
+                    <button class="tweet__like ${liked ? this.class.classLikeTweet.active: ''}" data-id="${id}">
                                 ${likes}
                             </button>
                     </footer>
@@ -79,11 +98,14 @@ class Twitter {
         })
 
     }
-    showUserPost() {
-
+    showUserPost = () => {
+        const post = this.tweets.posts.filter(item=>item.nickname===this.user.nick)
+        this.renderPost(post)
     }
-    showLikesPost() {
-
+    showLikedPost = () => {
+        const post = this.tweets.posts.filter(item=>item.liked)
+        this.renderPost(post)
+        console.log(this.tweets.posts);
     }
     showAllPost() {
         this.renderPost(this.tweets.posts)
@@ -102,30 +124,31 @@ class Twitter {
         const openModal = (e) => {
             modalElem.style.display = "block";
         }
-        const closeModal = (elem,e) => {
-            if (e.target===elem) {
+        const closeModal = (elem, e) => {
+            if (e.target === elem) {
                 modalElem.style.display = 'none';
             }
         }
         buttonElem.addEventListener('click', openModal);
         closeElem.addEventListener('click', closeModal.bind(null, closeElem));
         overlayElem.addEventListener('click', closeModal.bind(null, overlayElem));
-        
+
         this.handlerModal.closeModal = () => {
             overlayElem.style.display = 'none'
         };
 
     }
-    addTweet({text,
+    addTweet({
+        text,
         img,
-        submit}) {
+        submit
+    }) {
         const textElem = document.querySelector(text);
         const imgElem = document.querySelector(img);
         const submitElem = document.querySelector(submit);
 
         let tempString = textElem.innerHTML;
-        let imgUrl='';
-        
+        let imgUrl = '';
         submitElem.addEventListener('click', e => {
             this.tweets.addPost({
                 userName: this.user.name,
@@ -135,11 +158,10 @@ class Twitter {
             });
             this.handlerModal.closeModal();
             this.showAllPost();
-            console.log(this.tweets);
             textElem.innerHTML = tempString;
-            
         });
-        
+
+
         textElem.addEventListener('click', () => {
             if (textElem.innerHTML === tempString) {
                 textElem.innerHTML = "";
@@ -149,6 +171,27 @@ class Twitter {
             imgUrl = prompt('Введите вдрес картинки');
         })
     }
+    handlerTweet = e => {
+        if (e.target.classList.contains(this.class.classDeleteTweet)) {
+            this.tweets.deletePost(e.target.dataset.id);
+            this.showAllPost()
+        }
+        if (e.target.classList.contains(this.class.classLikeTweet.like)) {
+            this.tweets.likePost(e.target.dataset.id);
+            this.showAllPost()
+        }
+    }
+    changeSort = () => {
+        this.sortDate = !this.sortDate;
+        this.showAllPost();
+    }
+    sortFields() {
+        if (this.sortDate) {
+            return (a, b) => new Date(b.postDate) - new Date(a.postDate);
+        } else {
+            return (a, b) => b.likes - a.likes;
+        }
+    }
 }
 
 class Posts {
@@ -157,22 +200,18 @@ class Posts {
     } = {}) {
         this.posts = posts;
     }
-    addPost(tweet) {
+    addPost = tweet => {
         this.posts.push(new Post(tweet))
-        //console.log(this.posts);
     }
     deletePost(id) {
-        this.posts.filter((item, index, arr) => {
-            if (item.id == id) {
-                return this.posts.splice(index, 1)
-            }
+        this.posts = this.posts.filter(item => {
+            return item.id !== id;
         })
     }
     likePost(id) {
         this.posts.filter((item => {
-            if (item.id == id) {
-                let post = new Post(tweet);
-                post.changeLike()
+            if (item.id === id) {
+                item.changeLike()
             }
         }))
     }
@@ -192,7 +231,7 @@ class Post {
         this.id = id || this.generateID();
         this.userName = userName;
         this.nickname = nickname;
-        this.postDate = postDate ? new Date(postDate) : new Date;
+        this.postDate = postDate ? this.correctDate(postDate) : new Date;
         this.text = text;
         this.img = img;
         this.likes = likes;
@@ -221,13 +260,20 @@ class Post {
         }
         return this.postDate.toLocaleString('ru-Ru', options)
     }
+    correctDate(date) {
+        if (isNaN(Date.parse(date))) {
+            console.log('Не корректная дата');
+            return date = date.replace(/\./g, '/')
+        }
+        return new Date(date)
+    }
 }
 
 let twitter = new Twitter({
     listElem: '.tweet-list',
     user: {
         name: 'Aleh',
-        nick: 'krendil',  
+        nick: 'krendil',
     },
     modalElems: [{
         button: '.header__link_tweet',
@@ -236,8 +282,22 @@ let twitter = new Twitter({
         close: '.modal-close__btn'
     }],
     tweetElems: [{
-        text: '.modal .tweet-form__text',
-        img: '.modal .tweet-img__btn',
-        submit:'.modal .tweet-form__btn',
-    }]
+            text: '.modal .tweet-form__text',
+            img: '.modal .tweet-img__btn',
+            submit: '.modal .tweet-form__btn',
+        },
+        {
+            text: '.tweet-form__text',
+            img: '.tweet-img__btn',
+            submit: '.tweet-form__btn',
+        }
+    ],
+    classDeleteTweet: 'tweet__delete-button',
+    classLikeTweet: {
+        like: 'tweet__like',
+        active: 'tweet__like_active'
+    },
+    sortElem: '.header__link_sort',
+    showUserPostsElem: '.header__link_profile',
+    showLikedPostElem: '.header__link_likes'
 })
